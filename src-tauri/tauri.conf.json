@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CopyX",
+  "version": "0.2.2",
+  "identifier": "com.textworkbench.desktop.tauri",
+  "build": { "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false,
+        "title": "CopyX",
+        "titleBarStyle": "Transparent",
+        "hiddenTitle": true,
+        "theme": "Light",
+        "backgroundColor": "#f2f4fa",
+        "width": 1380,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 700
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.icns", "icons/icon.ico", "../assets/icon.png"],
+    "macOS": { "minimumSystemVersion": "14.0", "signingIdentity": "-" },
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "currentUser" }
+    }
+  }
+}

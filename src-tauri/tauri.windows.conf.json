@@ -1,0 +1,11 @@
+{
+  "bundle": {
+    "resources": { "../electron/native/capture.ps1": "capture.ps1" },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}

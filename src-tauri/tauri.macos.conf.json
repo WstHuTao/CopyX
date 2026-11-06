@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": {
+      "../assets/capture-mac": "capture-mac",
+      "../assets/trayTemplate.png": "trayTemplate.png"
+    }
+  }
+}

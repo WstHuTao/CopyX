@@ -1,0 +1,124 @@
+{
+  "name": "copyx",
+  "productName": "CopyX",
+  "version": "0.1.13",
+  "private": true,
+  "description": "支持脚本与 AI 命令的文本对照处理工具",
+  "author": "Ivan",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "start": "npm run build && electron .",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/*.test.mjs",
+    "test:desktop": "npm run build && node scripts/desktop-smoke.mjs",
+    "native:mac": "swiftc -target arm64-apple-macosx14.0 electron/native/capture.swift -o assets/capture-mac -framework AppKit -framework ApplicationServices",
+    "package:mac": "npm run native:mac && npm run build && electron-builder --mac dmg --arm64",
+    "package:win": "npm run build && electron-builder --win nsis --x64",
+    "test:script-tests": "npm run build && node scripts/script-tests-smoke.mjs",
+    "test:drawer": "npm run build && node scripts/drawer-markdown-smoke.mjs",
+    "test:prompt-history": "npm run build && node scripts/prompt-history-smoke.mjs",
+    "test:scheme-share": "npm run build && node scripts/scheme-share-smoke.mjs",
+    "package:tauri:mac": "npm run native:mac && tauri build --target aarch64-apple-darwin --bundles app,dmg",
+    "package:tauri:win": "tauri build --target x86_64-pc-windows-msvc --bundles nsis"
+  },
+  "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "acorn": "8.19.0",
+    "quickjs-emscripten-core": "0.32.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/cli": "2.12.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "45.2.2",
+    "electron-builder": "^26.0.12",
+    "lucide-react": "^0.468.0",
+    "monaco-editor": "0.57.0",
+    "playwright": "^1.56.0",
+    "prettier": "^3.9.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.textworkbench.desktop",
+    "productName": "CopyX",
+    "asar": true,
+    "electronLanguages": [
+      "en",
+      "zh"
+    ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "assets/icon.png",
+      "assets/trayTemplate*.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "dmg": {
+      "format": "UDBZ"
+    },
+    "mac": {
+      "icon": "src-tauri/icons/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "minimumSystemVersion": "14.0",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "extraResources": [
+        {
+          "from": "assets/capture-mac",
+          "to": "capture-mac",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "electron/native/capture.ps1",
+          "to": "capture.ps1"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "CopyX"
+    },
+    "icon": "assets/icon.png"
+  },
+  "overrides": {
+    "dompurify": "3.4.17"
+  },
+  "license": "Apache-2.0"
+}
