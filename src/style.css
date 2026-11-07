@@ -111,36 +111,30 @@ aside {
   width: 36px;
   height: 36px;
 }
-.sidebar-brand:has(.update-badge) {
-  gap: 6px;
-  padding-inline: 6px;
-  font-size: 28px;
-}
-.sidebar-brand:has(.update-badge) img {
-  width: 32px;
-  height: 32px;
+.sidebar-brand > span {
+  flex: none;
 }
 button.update-badge {
   flex: none;
-  padding: 3px 5px;
+  align-self: flex-start;
+  margin: -2px 0 0 -6px;
+  padding: 3px 4px;
   border: 0;
-  border-radius: 6px;
-  background: #d02637;
+  border-radius: 4px;
+  background: #a9344a;
   color: #fff;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0;
-  animation: update-badge-pulse 1.8s ease-in-out infinite;
+  animation: update-badge-pulse 1.25s ease-in-out 2;
 }
 button.update-badge:hover {
-  background: #aa1e31;
-  animation-play-state: paused;
+  background: #86293b;
 }
 @keyframes update-badge-pulse {
   50% {
-    background: #ae2031;
-    box-shadow: 0 0 0 3px #d0263733;
+    background: #c43c57;
   }
 }
 nav {
@@ -600,13 +594,9 @@ footer small {
     width: 30px;
     height: 30px;
   }
-  .sidebar-brand:has(.update-badge) {
-    gap: 5px;
-    font-size: 22px;
-  }
-  .sidebar-brand:has(.update-badge) img {
-    width: 26px;
-    height: 26px;
+  button.update-badge {
+    margin-left: -5px;
+    padding-inline: 2px;
   }
   .workspace {
     padding-inline: 20px;
