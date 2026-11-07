@@ -84,5 +84,7 @@ if (!window.desktop && isTauri()) {
     onCapture: (callback) => subscribe("copyx-capture", callback),
     onNotice: (callback) => subscribe("copyx-notice", callback),
     onUpdateStatus: (callback) => subscribe("copyx-update-status", callback),
+    availableUpdate: command("update:available"),
+    openUpdate: command("update:open"),
   } satisfies Desktop;
 }

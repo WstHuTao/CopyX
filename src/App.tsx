@@ -76,6 +76,7 @@ export default function App() {
   const editModel = draft.models.find((m) => m.id === editingModel);
   const storedEditScheme = config.schemes.find((s) => s.id === editing);
   const [switchSaving, setSwitchSaving] = useState(false);
+  const [availableVersion, setAvailableVersion] = useState<string | null>(null);
   const editingShortcut =
     editScheme?.kind === "ai" ? draft.aiShortcut : editScheme;
   const editingShortcutText = editingShortcut?.enabled
@@ -141,6 +142,25 @@ export default function App() {
       stopUpdateStatus?.();
     };
   }, [notify]);
+  useEffect(() => {
+    const check = api?.availableUpdate;
+    if (!check) return;
+    let disposed = false;
+    const refreshUpdate = async () => {
+      try {
+        const version = await unwrap(check());
+        if (!disposed) setAvailableVersion(version);
+      } catch {
+        // 后台检查失败时保留上一次状态，避免打断当前工作。
+      }
+    };
+    void refreshUpdate();
+    const timer = window.setInterval(refreshUpdate, 6 * 60 * 60 * 1000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, []);
   const execute = useCallback(
     async (
       text: string,
@@ -474,6 +494,21 @@ export default function App() {
         <div className="sidebar-brand" aria-label="CopyX">
           <img src={brandMark} alt="" width="36" height="36" />
           <span>CopyX</span>
+          {availableVersion && api?.openUpdate && (
+            <button
+              className="update-badge"
+              aria-label={`查看 CopyX ${availableVersion} 更新`}
+              title={`CopyX ${availableVersion} 可更新`}
+              onClick={() => {
+                if (api.openUpdate)
+                  void unwrap(api.openUpdate()).catch((error) =>
+                    notify((error as Error).message, true),
+                  );
+              }}
+            >
+              NEW
+            </button>
+          )}
         </div>
         <nav aria-label="主导航">
           {(

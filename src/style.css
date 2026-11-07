@@ -111,6 +111,38 @@ aside {
   width: 36px;
   height: 36px;
 }
+.sidebar-brand:has(.update-badge) {
+  gap: 6px;
+  padding-inline: 6px;
+  font-size: 28px;
+}
+.sidebar-brand:has(.update-badge) img {
+  width: 32px;
+  height: 32px;
+}
+button.update-badge {
+  flex: none;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: #d02637;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0;
+  animation: update-badge-pulse 1.8s ease-in-out infinite;
+}
+button.update-badge:hover {
+  background: #aa1e31;
+  animation-play-state: paused;
+}
+@keyframes update-badge-pulse {
+  50% {
+    background: #ae2031;
+    box-shadow: 0 0 0 3px #d0263733;
+  }
+}
 nav {
   display: flex;
   flex-direction: column;
@@ -567,6 +599,14 @@ footer small {
   .sidebar-brand img {
     width: 30px;
     height: 30px;
+  }
+  .sidebar-brand:has(.update-badge) {
+    gap: 5px;
+    font-size: 22px;
+  }
+  .sidebar-brand:has(.update-badge) img {
+    width: 26px;
+    height: 26px;
   }
   .workspace {
     padding-inline: 20px;

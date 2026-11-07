@@ -5,7 +5,7 @@ use crate::{
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Url, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Error, Update, UpdaterExt};
 
 const RELEASE_ORIGIN: &str = "github.com";
 const RELEASE_PATH: &str = "/WstHuTao/CopyX/releases/download";
@@ -64,8 +64,7 @@ pub fn start(app: &AppHandle) {
     });
 }
 
-async fn check(app: &AppHandle, window: &WebviewWindow) -> Result<()> {
-    status(window, "正在检查更新…");
+async fn available_update(app: &AppHandle) -> Result<Option<Update>> {
     let updater = app
         .updater_builder()
         .timeout(Duration::from_secs(180))
@@ -74,7 +73,31 @@ async fn check(app: &AppHandle, window: &WebviewWindow) -> Result<()> {
     let update = tokio::time::timeout(Duration::from_secs(15), updater.check())
         .await
         .map_err(|_| "检查更新超时，请检查网络后重试")?
-        .map_err(|_| "无法读取 GitHub 更新信息，请检查网络后重试")?;
+        .map_err(|error| match error {
+            Error::ReleaseNotFound => "GitHub 暂无可读取的更新清单，请稍后再试",
+            _ => "无法读取 GitHub 更新信息，请检查网络后重试",
+        })?;
+    if let Some(update) = &update {
+        let version = &update.version;
+        let asset = if cfg!(target_os = "macos") {
+            format!("CopyX-{version}-macos-arm64.app.tar.gz")
+        } else {
+            format!("CopyX-{version}-windows-x64-setup.exe")
+        };
+        if !trusted_download(&update.download_url, version, &asset) {
+            return Err("更新包地址与 CopyX 官方发布不一致".into());
+        }
+    }
+    Ok(update)
+}
+
+pub async fn available_version(app: &AppHandle) -> Result<Option<String>> {
+    Ok(available_update(app).await?.map(|update| update.version))
+}
+
+async fn check(app: &AppHandle, window: &WebviewWindow) -> Result<()> {
+    status(window, "正在检查更新…");
+    let update = available_update(app).await?;
     let Some(update) = update else {
         let message = format!("CopyX {} 已是最新版本。", app.package_info().version);
         status(window, &message);
@@ -82,14 +105,6 @@ async fn check(app: &AppHandle, window: &WebviewWindow) -> Result<()> {
         return Ok(());
     };
     let version = &update.version;
-    let asset = if cfg!(target_os = "macos") {
-        format!("CopyX-{version}-macos-arm64.app.tar.gz")
-    } else {
-        format!("CopyX-{version}-windows-x64-setup.exe")
-    };
-    if !trusted_download(&update.download_url, version, &asset) {
-        return Err("更新包地址与 CopyX 官方发布不一致".into());
-    }
     let mut message = format!("当前版本 {}\n可用版本 {version}", update.current_version);
     if let Some(notes) = update
         .body

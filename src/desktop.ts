@@ -187,6 +187,8 @@ export interface Desktop {
   ): () => void;
   onNotice(fn: (message: string) => void): () => void;
   onUpdateStatus?(fn: (message: string) => void): () => void;
+  availableUpdate?(): Promise<Reply<string | null>>;
+  openUpdate?(): Promise<Reply<void>>;
 }
 declare global {
   interface Window {

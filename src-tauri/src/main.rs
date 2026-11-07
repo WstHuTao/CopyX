@@ -56,6 +56,17 @@ async fn desktop(window: WebviewWindow, command: String, input: Value) -> contra
         window.app_handle().exit(0);
         return Ok(Value::Null);
     }
+    match command.as_str() {
+        "update:available" => {
+            let version = updates::available_version(window.app_handle()).await?;
+            return Ok(serde_json::json!(version));
+        }
+        "update:open" => {
+            updates::start(window.app_handle());
+            return Ok(Value::Null);
+        }
+        _ => {}
+    }
     let state = window.try_state::<Desktop>().ok_or_else(|| {
         window.try_state::<StartupError>().map_or_else(
             || "CopyX 桌面服务尚未启动".to_string(),
