@@ -115,6 +115,17 @@ try {
       return registered;
     };
     require(${JSON.stringify(require.resolve("../electron/core/capture.cjs"))}).captureSelection = async () => ${JSON.stringify(text)};
+    require(${JSON.stringify(require.resolve("../electron/core/capture.cjs"))}).captureDirect = async () => {
+      let received;
+      return {
+        text: ${JSON.stringify(text)},
+        replace: async (result) => {
+          received = result;
+          return globalThis.copyxDirectAllowed;
+        },
+        close: () => globalThis.copyxDirectDone(received),
+      };
+    };
     require(${JSON.stringify(require.resolve("../electron/main.cjs"))});
   `,
   );
@@ -346,9 +357,72 @@ try {
   assert(!stored.includes("仅用于测试的选中文字"));
   assert(!stored.includes("仅在工作台显示的结果"));
   assert(!stored.includes("copyx-prompt-fixture-key"));
+  const enabledScript = await page.evaluate(async (input) => {
+    const settings = (await window.desktop.getConfig()).data;
+    const scheme = settings.schemes.find((item) => item.id === "s");
+    scheme.script = 'function transform(text) { return text + "已处理"; }';
+    scheme.testCases = [
+      { id: "case", name: "直接粘贴", input, expected: input + "已处理" },
+    ];
+    const saved = await window.desktop.saveConfig(settings);
+    if (!saved.ok) return saved;
+    const tested = await window.desktop.testScript({
+      requestId: crypto.randomUUID(),
+      schemeId: scheme.id,
+      script: scheme.script,
+      testCases: scheme.testCases,
+    });
+    if (!tested.ok) return tested;
+    return window.desktop.activateScript({
+      schemeId: scheme.id,
+      fingerprint: tested.data.fingerprint,
+    });
+  }, text);
+  assert(enabledScript.ok, enabledScript.error);
+  await page.reload();
+  await button("自定义处理").click();
+  await button("本地脚本 JavaScript 脚本").click();
+  await button("编辑设置").click();
+  const direct = page.getByRole("checkbox", { name: "处理后直接粘贴" });
+  assert.equal(await direct.isChecked(), false);
+  await direct.check();
+  await button("保存草稿").click();
+  await footer("配置已保存").waitFor();
+  assert.equal(
+    (await config()).schemes.find(({ id }) => id === "s").directPaste,
+    true,
+  );
+  async function triggerDirect(allowed) {
+    return app.evaluate(
+      ({ globalShortcut }, { key, allowed }) => {
+        if (!globalShortcut.isRegistered(key))
+          throw new Error("脚本快捷键尚未注册");
+        globalThis.copyxDirectAllowed = allowed;
+        return new Promise((resolve) => {
+          globalThis.copyxDirectDone = resolve;
+          globalThis.copyxFixtureShortcuts.get(key)();
+        });
+      },
+      { key: keyScript, allowed },
+    );
+  }
+  assert.equal(await triggerDirect(true), text + "已处理");
+  assert.equal(
+    await page.getByRole("heading", { name: "自定义处理" }).count(),
+    1,
+  );
+  assert.equal(await triggerDirect(false), text + "已处理");
+  await footer("无法确认已粘贴").waitFor();
+  await page
+    .locator(".monaco-diff-editor .modified .view-lines")
+    .filter({ hasText: "已处理" })
+    .waitFor();
   assert.deepEqual(errors, []);
   console.log(
     "AI 提示词桌面验证通过：旧键位迁移、单一键位入口、共享注册、冲突检测、首次使用提示、成功记录、收藏排序、胶囊选择、编辑与删除、旧默认保护、失败与取消、同模型复用、重启保留及正文不落盘。",
+  );
+  console.log(
+    "直接粘贴桌面验证通过：默认关闭、验证后启用、成功保留当前页面、失败回到核对页且保留结果。",
   );
 } finally {
   if (app) await app.close();

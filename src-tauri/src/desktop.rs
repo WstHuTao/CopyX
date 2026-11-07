@@ -228,33 +228,72 @@ impl Desktop {
         let Some(target) = target else {
             return;
         };
-        let payload = self.capture_payload(target);
-        let result = match payload {
-            Ok(mut payload) => native::capture(app).await.map(|text| {
+        let result = match self.capture_payload(target) {
+            Ok((payload, Some(source))) => self.capture_and_paste(app, payload, &source).await,
+            Ok((mut payload, None)) => native::capture(app).await.map(|text| {
                 payload["text"] = json!(text);
-                payload
+                Some(payload)
             }),
             Err(error) => Err(error),
         };
-        // 取文前不切走源应用的焦点，释放互斥后才能接收工作台的执行请求。
+        if matches!(&result, Ok(None)) {
+            return;
+        }
+        // 取文及直接粘贴结束后再打开核对窗口。
         open(app);
         drop(gate);
         match result {
-            Ok(payload) => {
+            Ok(Some(payload)) => {
                 let _ = app.emit_to("main", "copyx-capture", payload);
             }
+            Ok(None) => {}
             Err(error) => notice(app, error),
         }
     }
 
-    fn capture_payload(&self, target: shortcuts::Target) -> Result<Value> {
+    async fn capture_and_paste(
+        &self,
+        app: &AppHandle,
+        mut payload: Value,
+        source: &str,
+    ) -> Result<Option<Value>> {
+        let (text, session) = native::capture_direct(app).await?;
+        let outcome: Result<Option<String>> = async {
+            let task = self.begin(TaskKind::Process, None)?;
+            let result = script::run(&text, source, &task.cancel).await?;
+            if result.len() > 2 * MB {
+                return Err("处理结果超过 2 MB，请分段处理".into());
+            }
+            task.complete()?;
+            if let Some(session) = session {
+                if session.replace(&result).await {
+                    return Ok(None);
+                }
+            }
+            Ok(Some(result))
+        }
+        .await;
+        let prepared = match outcome {
+            Ok(None) => return Ok(None),
+            Ok(Some(result)) => json!({
+                "result":result,"notice":"无法确认已粘贴，请核对原应用与处理结果。"
+            }),
+            Err(error) => json!({"error":error}),
+        };
+        payload["text"] = json!(text);
+        payload["prepared"] = prepared;
+        Ok(Some(payload))
+    }
+
+    fn capture_payload(&self, target: shortcuts::Target) -> Result<(Value, Option<String>)> {
         let store = lock(&self.store)?;
         if target.shared {
             let (entry, latest) = store::latest_target(&store.value);
             if let (Some(entry), Some(scheme)) = (entry, latest) {
-                return Ok(
+                return Ok((
                     json!({"schemeId":scheme.id,"prompt":entry.last_run.prompt,"latestPromptId":entry.id}),
-                );
+                    None,
+                ));
             }
             let scheme = store
                 .value
@@ -266,10 +305,11 @@ impl Desktop {
                         && s.model_id.as_ref().is_some_and(|s| !s.is_empty())
                 })
                 .ok_or("请先配置 AI 提示词命令")?;
-            return Ok(
+            return Ok((
                 json!({"schemeId":scheme.id,"prompt":entry.map(|e|e.last_run.prompt.as_str()).unwrap_or(&scheme.prompt),
                 "promptNotice":if entry.is_some(){"上次使用的 AI 处理已禁用或配置已变更，请先在工作台成功执行一次"}else{"请先在工作台成功执行一次提示词，之后可用快捷键直接处理"}}),
-            );
+                None,
+            ));
         }
         let scheme = store
             .value
@@ -278,8 +318,11 @@ impl Desktop {
             .find(|s| s.id == target.id)
             .ok_or("自定义处理已变更")?;
         scheme.ensure_enabled()?;
-        script::active_source(scheme.active_script.as_ref().ok_or("请先测试并生效脚本")?)?;
-        Ok(json!({"schemeId":target.id}))
+        let active = scheme.active_script.as_ref().ok_or("请先测试并生效脚本")?;
+        let source = script::active_source(active)?;
+        let direct =
+            (scheme.direct_paste && active.status == "verified").then(|| source.to_owned());
+        Ok((json!({"schemeId":target.id}), direct))
     }
 
     pub async fn call(&self, window: &WebviewWindow, command: &str, input: Value) -> Result<Value> {

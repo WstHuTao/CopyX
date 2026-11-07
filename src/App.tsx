@@ -188,7 +188,14 @@ export default function App() {
   useEffect(
     () =>
       api?.onCapture(
-        async ({ text, schemeId, prompt, latestPromptId, promptNotice }) => {
+        async ({
+          text,
+          schemeId,
+          prompt,
+          latestPromptId,
+          promptNotice,
+          prepared,
+        }) => {
           if (busyRef.current || saveBusy.current) return;
           if (
             dirty.current &&
@@ -213,7 +220,16 @@ export default function App() {
               : null,
           );
           setPage("work");
-          if (promptNotice) notify(promptNotice);
+          if (prepared) {
+            if ("error" in prepared) {
+              notify(prepared.error, true);
+            } else {
+              resultRef.current = prepared.result;
+              setResult(prepared.result);
+              setHasProcessed(true);
+              notify(prepared.notice);
+            }
+          } else if (promptNotice) notify(promptNotice);
           else void execute(text, current, prompt, latestPromptId);
         },
       ),
@@ -991,6 +1007,26 @@ export default function App() {
                       }}
                       notify={notify}
                     />
+                    {editScheme.kind === "script" && (
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={editScheme.directPaste === true}
+                          disabled={
+                            storedEditScheme?.activeScript?.status !==
+                            "verified"
+                          }
+                          onChange={(e) =>
+                            updateScheme({ directPaste: e.target.checked })
+                          }
+                        />
+                        处理后直接粘贴
+                        {storedEditScheme?.activeScript?.status !==
+                          "verified" && (
+                          <small>测试通过并启用脚本后可设置</small>
+                        )}
+                      </label>
+                    )}
                   </fieldset>
                   {!basicExpanded && !editScheme.disabled && (
                     <div className="processing-shortcut-summary">

@@ -48,6 +48,8 @@ pub struct ActiveScript {
 pub struct Scheme {
     #[serde(default)]
     pub disabled: bool,
+    #[serde(default)]
+    pub direct_paste: bool,
     pub id: String,
     pub name: String,
     pub kind: Kind,

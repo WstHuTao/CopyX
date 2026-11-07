@@ -239,6 +239,7 @@ fn initial_config() -> Config {
         prompt_history: vec![],
         schemes: vec![Scheme {
             disabled: false,
+            direct_paste: false,
             id: "clean".into(),
             name: "文本清理".into(),
             kind: Kind::Script,
@@ -436,6 +437,11 @@ impl Store {
                 .iter()
                 .find(|s| s.id == scheme.id)
                 .and_then(|s| s.active_script.clone());
+            scheme.direct_paste &= scheme.kind == Kind::Script
+                && scheme
+                    .active_script
+                    .as_ref()
+                    .is_some_and(|s| s.status == "verified");
         }
         validate_config(&next)?;
         for model in &mut next.models {

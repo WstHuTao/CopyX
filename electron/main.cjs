@@ -29,6 +29,7 @@ const { ScriptTests, activeScriptSource } = require("./core/script-tests.cjs");
 const scriptTests = new ScriptTests();
 const {
   captureSelection,
+  captureDirect,
   checkCapturePermission,
 } = require("./core/capture.cjs");
 const { ShortcutManager, shortcutBindings } = require("./core/shortcuts.cjs");
@@ -89,6 +90,37 @@ else {
       ? path.join(__dirname, "native/capture.ps1")
       : path.join(__dirname, "../assets/capture-mac");
   }
+  async function runDirectCapture(target, source) {
+    const selection = await captureDirect(captureHelper());
+    const { text } = selection;
+    const controller = new AbortController();
+    task = controller;
+    try {
+      const result = await runScript(text, source, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) throw new Error("处理已取消");
+      if (Buffer.byteLength(result) > 2 * 1024 * 1024)
+        throw new Error("处理结果超过 2 MB，请分段处理");
+      controller.finishing = true;
+      if (await selection.replace(result)) return;
+      open();
+      send("capture", {
+        ...target,
+        text,
+        prepared: {
+          result,
+          notice: "无法确认已粘贴，请核对原应用与处理结果。",
+        },
+      });
+    } catch (error) {
+      open();
+      send("capture", { ...target, text, prepared: { error: error.message } });
+    } finally {
+      selection.close();
+      task = null;
+    }
+  }
   async function capture(schemeId, sharedAI) {
     if (capturing || task || saving || shortcuts.suspended) {
       send("notice", "已有任务正在执行，请完成或取消后再试");
@@ -119,7 +151,13 @@ else {
       const scheme = store.value.schemes.find((s) => s.id === target.schemeId);
       if (scheme?.disabled)
         throw new Error("此自定义指令已禁用，请在自定义处理中启用并保存");
-      if (scheme?.kind === "script") activeScriptSource(scheme);
+      if (scheme?.kind === "script") {
+        const source = activeScriptSource(scheme);
+        if (scheme.directPaste && scheme.activeScript?.status === "verified") {
+          await runDirectCapture(target, source);
+          return;
+        }
+      }
       const text = await captureSelection(captureHelper());
       open();
       send("capture", { text, ...target });
@@ -211,7 +249,7 @@ else {
       if (Buffer.byteLength(text) > 2 * 1024 * 1024)
         throw new Error("处理结果超过 2 MB，请分段处理");
       if (scheme.kind === "script") return { text };
-      controller.historyCommit = true;
+      controller.finishing = true;
       try {
         const history = await store.persistPromptHistory(
           recordPromptUse(
@@ -325,7 +363,7 @@ else {
         checkCapturePermission(captureHelper()),
     );
     handle("process:cancel", () => {
-      if (!task?.historyCommit) task?.abort();
+      if (!task?.finishing) task?.abort();
     });
     handle("process:run", async (input) => (await processText(input)).text);
     handle("process:run-prompt", (input) => processText(input, true));

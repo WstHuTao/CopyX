@@ -46,6 +46,11 @@ function validateConfig(value, { allowLargeScript = () => false } = {}) {
         throw new Error("方案字段格式不正确");
     if (scheme.disabled !== undefined && typeof scheme.disabled !== "boolean")
       throw new Error("指令禁用状态不正确");
+    if (
+      scheme.directPaste !== undefined &&
+      typeof scheme.directPaste !== "boolean"
+    )
+      throw new Error("直接粘贴设置格式不正确");
     if (typeof scheme.enabled !== "boolean")
       throw new Error("方案启用状态不正确");
     if (
@@ -163,6 +168,12 @@ class ConfigStore {
         prompt: s.prompt,
         enabled: s.enabled,
         disabled: s.disabled ?? false,
+        directPaste:
+          s.directPaste === true &&
+          s.kind === "script" &&
+          this.value.schemes.some(
+            (old) => old.id === s.id && old.activeScript?.status === "verified",
+          ),
         shortcutMac: s.shortcutMac,
         shortcutWin: s.shortcutWin,
         modelId: s.modelId,

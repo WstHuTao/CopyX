@@ -1,8 +1,11 @@
 use crate::contract::*;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager};
-use tokio::{io::AsyncReadExt, process::Command};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    process::{Child, ChildStdout, Command},
+};
 
 const CAPTURE_JSON_LIMIT: usize = 6 * MB + 4 * KB;
 
@@ -12,11 +15,11 @@ fn mac_capture_command(app: &AppHandle) -> Result<Command> {
     Ok(Command::new(dir.join("capture-mac")))
 }
 
-pub async fn capture(app: &AppHandle) -> Result<String> {
+fn capture_command(app: &AppHandle) -> Result<Command> {
     #[cfg(target_os = "macos")]
-    let mut command = mac_capture_command(app)?;
+    let command = mac_capture_command(app)?;
     #[cfg(windows)]
-    let mut command = {
+    let command = {
         let dir = app.path().resource_dir().map_err(|_| "无法定位取文程序")?;
         let shell = std::env::var_os("SystemRoot")
             .map(std::path::PathBuf::from)
@@ -37,7 +40,11 @@ pub async fn capture(app: &AppHandle) -> Result<String> {
         command.creation_flags(0x08000000);
         command
     };
-    let mut child = command
+    Ok(command)
+}
+
+pub async fn capture(app: &AppHandle) -> Result<String> {
+    let mut child = capture_command(app)?
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -69,6 +76,13 @@ pub async fn capture(app: &AppHandle) -> Result<String> {
     if !status.success() {
         return Err("系统复制未完成".into());
     }
+    capture_text(&value)
+}
+
+fn capture_text(value: &Value) -> Result<String> {
+    if let Some(message) = value["error"].as_str() {
+        return Err(message.into());
+    }
     let before = value["before"]
         .as_u64()
         .or_else(|| value["before"].as_i64().map(|n| n as u64));
@@ -86,6 +100,61 @@ pub async fn capture(app: &AppHandle) -> Result<String> {
         return Err("选中文字超过 1 MB，请分段处理".into());
     }
     Ok(text.into())
+}
+
+pub struct DirectCapture {
+    child: Child,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl DirectCapture {
+    async fn frame(&mut self, limit: usize) -> Result<Value> {
+        let mut bytes = Vec::new();
+        (&mut self.stdout)
+            .take((limit + 1) as u64)
+            .read_until(b'\n', &mut bytes)
+            .await
+            .map_err(|_| "无法读取取文程序结果")?;
+        if bytes.len() > limit {
+            return Err("选中文字超过 1 MB，请分段处理".into());
+        }
+        serde_json::from_slice(&bytes).map_err(|_| "无法读取取文程序结果".into())
+    }
+
+    pub async fn replace(mut self, text: &str) -> bool {
+        let request = format!("{}\n", json!({ "text": text }));
+        let Some(mut stdin) = self.child.stdin.take() else {
+            return false;
+        };
+        let reply = tokio::time::timeout(Duration::from_secs(3), async {
+            stdin
+                .write_all(request.as_bytes())
+                .await
+                .map_err(|_| "无法发送处理结果")?;
+            drop(stdin);
+            self.frame(4 * KB).await
+        })
+        .await;
+        matches!(reply, Ok(Ok(value)) if value["pasted"] == true)
+    }
+}
+
+pub async fn capture_direct(app: &AppHandle) -> Result<(String, Option<DirectCapture>)> {
+    let mut child = capture_command(app)?
+        .arg(if cfg!(windows) { "-Direct" } else { "--direct" })
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| "无法启动取文程序")?;
+    let stdout = BufReader::new(child.stdout.take().ok_or("无法接收取文结果")?);
+    let mut session = DirectCapture { child, stdout };
+    let frame = tokio::time::timeout(Duration::from_secs(6), session.frame(CAPTURE_JSON_LIMIT))
+        .await
+        .map_err(|_| "获取选文超时，请松开快捷键后再试")??;
+    let text = capture_text(&frame)?;
+    Ok((text, (frame["direct"] == true).then_some(session)))
 }
 
 #[cfg(windows)]

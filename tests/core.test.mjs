@@ -10,9 +10,46 @@ const { runScript } = require("../electron/core/script.cjs");
 const { runAI, endpointFor } = require("../electron/core/ai.cjs");
 const { validateConfig, publicConfig } = require("../electron/core/config.cjs");
 const {
+  captureDirect,
   checkCapturePermission,
   validateCapture,
 } = require("../electron/core/capture.cjs");
+
+test(
+  "直接粘贴助手按帧确认结果，保留文本字符与空结果",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const dir = await mkdtemp(join(tmpdir(), "copyx-direct-capture-"));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const helper = join(dir, "capture-mac");
+    await writeFile(
+      helper,
+      `#!/usr/bin/env node
+const readline = require("node:readline");
+if (process.argv[2] !== "--direct") process.exit(1);
+console.log(JSON.stringify({ before: 1, after: 2, text: " 原文 ", direct: true }));
+readline.createInterface({ input: process.stdin }).once("line", (line) => {
+  const { text } = JSON.parse(line);
+  console.log(JSON.stringify({ pasted: text === "  结果\\r\\n" || text === "" }));
+});
+`,
+      { mode: 0o700 },
+    );
+    for (const [result, expected] of [
+      ["  结果\r\n", true],
+      ["", true],
+      ["其他内容", false],
+    ]) {
+      const captured = await captureDirect(helper);
+      try {
+        assert.equal(captured.text, " 原文 ");
+        assert.equal(await captured.replace(result), expected);
+      } finally {
+        captured.close();
+      }
+    }
+  },
+);
 
 test(
   "权限检查只调用取文程序的检测模式，并区分拒绝与检测失败",

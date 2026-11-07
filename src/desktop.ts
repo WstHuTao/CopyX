@@ -65,6 +65,7 @@ export const emptyShortcut: ShortcutSettings = {
 };
 export type Scheme = ShortcutSettings & {
   disabled?: boolean;
+  directPaste?: boolean;
   id: string;
   name: string;
   kind: "script" | "ai";
@@ -181,6 +182,7 @@ export interface Desktop {
       prompt?: string;
       latestPromptId?: string;
       promptNotice?: string;
+      prepared?: { result: string; notice: string } | { error: string };
     }) => void,
   ): () => void;
   onNotice(fn: (message: string) => void): () => void;
