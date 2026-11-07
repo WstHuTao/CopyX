@@ -9,6 +9,7 @@ mod script;
 mod share;
 mod shortcuts;
 mod store;
+mod updates;
 
 use desktop::{notice, open, Desktop};
 use serde_json::Value;
@@ -66,8 +67,9 @@ async fn desktop(window: WebviewWindow, command: String, input: Value) -> contra
 
 fn tray(app: &App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "open", "打开 CopyX", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "tray-update", "检查更新…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出 CopyX", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &update, &quit])?;
     let mut builder = TrayIconBuilder::new()
         .tooltip("CopyX")
         .menu(&menu)
@@ -108,8 +110,10 @@ fn tray(app: &App) -> tauri::Result<()> {
 fn edit_menu(app: &App) -> tauri::Result<()> {
     use tauri::menu::{MenuBuilder, SubmenuBuilder};
     let about = MenuItem::with_id(app, "app-about", "关于 CopyX", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "app-update", "检查更新…", true, None::<&str>)?;
     let application = SubmenuBuilder::new(app, "CopyX")
         .item(&about)
+        .item(&update)
         .separator()
         .quit_with_text("退出 CopyX")
         .build()?;
@@ -204,6 +208,19 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| open(app)))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .default_version_comparator(|current, release| {
+                    release.version.pre.is_empty() && release.version > current
+                })
+                .build(),
+        )
+        .manage(updates::Updates::default())
+        .on_menu_event(|app, event| {
+            if matches!(event.id().as_ref(), "tray-update" | "app-update") {
+                updates::start(app);
+            }
+        })
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {

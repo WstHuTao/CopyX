@@ -134,7 +134,12 @@ export default function App() {
         setReady(true);
       })
       .catch((e) => notify(e.message, true));
-    return api.onNotice((message) => notify(message, true));
+    const stopNotice = api.onNotice((message) => notify(message, true));
+    const stopUpdateStatus = api.onUpdateStatus?.((message) => notify(message));
+    return () => {
+      stopNotice();
+      stopUpdateStatus?.();
+    };
   }, [notify]);
   const execute = useCallback(
     async (

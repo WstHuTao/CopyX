@@ -116,6 +116,12 @@ pub fn notice(app: &AppHandle, message: String) {
 }
 
 impl Desktop {
+    pub fn try_update_install(&self) -> Result<tokio::sync::MutexGuard<'_, ()>> {
+        self.operation
+            .try_lock()
+            .map_err(|_| "请等待当前处理完成，再检查更新".into())
+    }
+
     pub fn load(app: &AppHandle) -> Result<Self> {
         let dir = match std::env::var_os("TEXT_WORKBENCH_TEST_DIR") {
             Some(dir) => PathBuf::from(dir),

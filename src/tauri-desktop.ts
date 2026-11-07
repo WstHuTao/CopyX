@@ -83,5 +83,6 @@ if (!window.desktop && isTauri()) {
     confirm: command("dialog:confirm"),
     onCapture: (callback) => subscribe("copyx-capture", callback),
     onNotice: (callback) => subscribe("copyx-notice", callback),
+    onUpdateStatus: (callback) => subscribe("copyx-update-status", callback),
   } satisfies Desktop;
 }

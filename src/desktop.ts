@@ -186,6 +186,7 @@ export interface Desktop {
     }) => void,
   ): () => void;
   onNotice(fn: (message: string) => void): () => void;
+  onUpdateStatus?(fn: (message: string) => void): () => void;
 }
 declare global {
   interface Window {

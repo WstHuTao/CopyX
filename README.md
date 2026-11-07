@@ -54,6 +54,10 @@ function transform(text) {
 - **分享范围** · 分享文件包含处理名称、脚本或初始提示词，以及你选择附带的测试用例。模型配置和 API Key 留在原设备。
 - **macOS 辅助功能** · 若系统开关已开启但「权限检查」仍显示未授权，可移除旧条目并重新添加「应用程序」里的 CopyX。使用临时签名的版本更新后，可能需要重新授权。
 
+## 检查更新
+
+macOS 的 CopyX 应用菜单和两端的托盘菜单提供「检查更新」。发现新版本后，下载并验签，再确认安装。安装前请保存草稿和需要保留的处理结果。0.2.2 及更早版本需要手动安装一次支持更新的版本。
+
 ## 从源码构建
 
 需要 Node.js 22.12+ 和 Rust stable。macOS 需要 Xcode 命令行工具，Windows 需要 x64 MSVC 构建工具及 Windows SDK。
@@ -70,6 +74,10 @@ npm ci
 安装包输出到 `src-tauri/target/<目标平台>/release/bundle/`。Windows 缺少 WebView2 时，安装器会尝试联网补装。
 
 运行 `npm test` 执行单元测试，运行 `npm run build` 检查 TypeScript 并构建前端。桌面回归可运行 `npm run test:desktop` 和 `npm run test:script-tests`。更多实现细节见[架构设计](docs/架构设计.md)、[需求说明](docs/需求说明.md)和 [Tauri 迁移设计](docs/tauri-迁移设计.md)。
+
+### 发布更新
+
+发布更新时，在仓库外保管签名私钥，通过 `TAURI_SIGNING_PRIVATE_KEY` 提供文件路径，并在两端的打包命令后加上 `-- --config '{"bundle":{"createUpdaterArtifacts":true}}'`。需要密码时使用 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。将 macOS 更新归档与 Windows 安装程序分别命名为 `CopyX-<版本>-macos-arm64.app.tar.gz` 和 `CopyX-<版本>-windows-x64-setup.exe`，各自的签名文件加同名 `.sig` 后缀。运行 `node scripts/prepare-update.mjs <发布目录> [更新说明文件]` 后，把两个包与 `latest.json` 一起发布到同一个 `v<版本>` 的 GitHub Release。macOS 用户首次安装仍使用普通 DMG。
 
 ## 作者与许可证
 
