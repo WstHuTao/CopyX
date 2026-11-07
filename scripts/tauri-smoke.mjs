@@ -14,6 +14,7 @@ const temp = await mkdtemp(join(tmpdir(), "copyx-tauri-smoke-"));
 const requests = [];
 const key = "copyx-smoke-key";
 const expected = "function transform(text) { return text + '！'; }";
+let conversions = 0;
 const server = createServer(async (req, res) => {
   try {
     assert.equal(req.url, "/v1/chat/completions");
@@ -30,7 +31,9 @@ const server = createServer(async (req, res) => {
       : system.includes("脚本生成助手")
         ? expected
         : system.includes("CopyX 文本转换器")
-          ? JSON.stringify({ unchanged: true })
+          ? ++conversions === 1
+            ? "原文无需更改。"
+            : JSON.stringify({ unchanged: true })
           : user;
     res.setHeader("Content-Type", "application/json");
     res.end(
@@ -129,7 +132,12 @@ try {
   await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
   await run();
   await run();
-  assert.equal(requests.length, 5);
+  assert.equal(requests.length, 6);
+  const [firstConversion, retry] = requests.filter(({ messages }) =>
+    messages[0].content.includes("CopyX 文本转换器"),
+  );
+  assert.match(retry.messages[0].content, /上次回复不符合返回格式/);
+  assert.deepEqual(firstConversion.messages[1], retry.messages[1]);
   const context = JSON.parse(requests[0].messages.at(-1).content);
   assert.ok(JSON.stringify(context).includes(script), "模型首轮应收到已有脚本");
   assert.ok(

@@ -53,6 +53,12 @@
       model.hasKey && !("encryptedKey" in model) && !("apiKey" in model),
       "桥接隐藏已迁移的模型密钥",
     );
+    await wait(
+      () =>
+        document.querySelector('select[aria-label="自定义处理"]')?.value ===
+        scheme.id,
+      "工作台未载入初始指令",
+    );
     const pausedConfig = structuredClone(config);
     pausedConfig.schemes.forEach((item) => {
       item.disabled = true;

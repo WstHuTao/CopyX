@@ -3,6 +3,9 @@ const path = require("node:path");
 const textRules = fs
   .readFileSync(path.join(__dirname, "text-transform-rules.txt"), "utf8")
   .trimEnd();
+const retryRule =
+  "\n上次回复不符合返回格式。请重新处理，只返回约定的 JSON 对象。";
+const defaultTimeout = 60_000;
 
 function endpointFor(baseUrl) {
   let url;
@@ -34,13 +37,7 @@ async function runAI(text, prompt, model, options = {}) {
     options,
   );
 }
-async function transformAI(text, prompt, model, options) {
-  const reply = await runAI(
-    text,
-    `${textRules}\n用户处理要求：\n${prompt}`,
-    model,
-    options,
-  );
+function transformResult(reply, text) {
   const output = reply.trim();
   const fenced = output.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*)\r?\n```$/);
   try {
@@ -52,10 +49,38 @@ async function transformAI(text, prompt, model, options) {
   } catch {
     // 格式错误统一提示，避免回显模型回复中的用户内容。
   }
-  throw new Error("模型未按要求返回处理结果，请重试或换一个模型");
 }
 
-async function runMessages(messages, model, { signal, timeout = 60000 } = {}) {
+async function transformAI(
+  text,
+  prompt,
+  model,
+  { signal, timeout = defaultTimeout } = {},
+) {
+  const start = performance.now();
+  for (const correction of ["", retryRule]) {
+    if (signal?.aborted) throw new Error("处理已取消");
+    const remaining = timeout - Math.floor(performance.now() - start);
+    if (remaining <= 0) throw new Error("模型请求超时，可手动重试");
+    const reply = await runAI(
+      text,
+      `${textRules}${correction}\n用户处理要求：\n${prompt}`,
+      model,
+      { signal, timeout: remaining },
+    );
+    const result = transformResult(reply, text);
+    if (result !== undefined) return result;
+  }
+  throw new Error(
+    "模型未按要求返回处理结果，已自动重试一次，请检查提示词或换一个模型",
+  );
+}
+
+async function runMessages(
+  messages,
+  model,
+  { signal, timeout = defaultTimeout } = {},
+) {
   if (
     !Array.isArray(messages) ||
     !messages.length ||

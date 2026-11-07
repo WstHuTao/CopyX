@@ -20,11 +20,15 @@ const server = http.createServer(async (req, res) => {
   let body = "";
   for await (const chunk of req) body += chunk;
   const { messages, model } = JSON.parse(body);
-  const prompt = messages[0].content.split("\n用户处理要求：\n")[1];
+  const system = messages[0].content;
+  const prompt = system.split("\n用户处理要求：\n")[1];
+  const retry = system.includes("上次回复不符合返回格式");
+  const firstEmailRequest =
+    prompt === "提取邮箱" && !requests.some((item) => item.prompt === prompt);
   requests.push({ prompt, text: messages[1].content, model });
   if (prompt === "失败提示词") {
     res.writeHead(503).end();
-  } else if (prompt === "取消提示词") {
+  } else if (prompt === "取消提示词" && retry) {
     slowStarted?.();
   } else {
     res.end(
@@ -33,7 +37,9 @@ const server = http.createServer(async (req, res) => {
           {
             message: {
               content:
-                prompt === "说明性回复"
+                prompt === "说明性回复" ||
+                prompt === "取消提示词" ||
+                firstEmailRequest
                   ? "无需改动，结果为 **飒飒**"
                   : JSON.stringify({ text: "仅在工作台显示的结果" }),
             },
@@ -193,6 +199,10 @@ try {
   await run("转成 JSON");
   await field("自定义处理").selectOption("b");
   await run("提取邮箱");
+  assert.equal(
+    requests.filter(({ prompt }) => prompt === "提取邮箱").length,
+    2,
+  );
   await button("提示词历史").click();
   await entry("转成 JSON")
     .getByRole("button", { name: "收藏", exact: true })
@@ -249,10 +259,18 @@ try {
   await field("本次提示词").fill("说明性回复");
   await button("执行处理").click();
   await footer("模型未按要求返回处理结果").waitFor();
+  assert.equal(
+    requests.filter(({ prompt }) => prompt === "说明性回复").length,
+    2,
+  );
   assert.equal((await config()).promptHistory[0].lastRun.prompt, "提取邮箱");
   await field("本次提示词").fill("失败提示词");
   await button("执行处理").click();
   await footer("HTTP 503").waitFor();
+  assert.equal(
+    requests.filter(({ prompt }) => prompt === "失败提示词").length,
+    1,
+  );
   const pending = new Promise((resolve) => {
     slowStarted = resolve;
   });
@@ -261,6 +279,10 @@ try {
   await pending;
   await button("取消处理").click();
   await footer("处理已取消").waitFor();
+  assert.equal(
+    requests.filter(({ prompt }) => prompt === "取消提示词").length,
+    2,
+  );
   assert.equal((await config()).promptHistory[0].lastRun.prompt, "提取邮箱");
   assert.equal((await config()).promptHistory.length, 2);
 

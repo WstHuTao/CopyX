@@ -2,6 +2,7 @@ use crate::{contract::*, script::sha256};
 use reqwest::{Client, Url};
 use serde_json::{json, Value};
 use std::time::Duration;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 pub fn endpoint(base: &str) -> Result<Url> {
@@ -141,13 +142,29 @@ impl Ai {
         cancel: &CancellationToken,
     ) -> Result<String> {
         let rules = include_str!("../../electron/core/text-transform-rules.txt").trim_end();
-        let system = format!("{rules}\n用户处理要求：\n{prompt}");
-        let reply = self.complete(text, &system, model, timeout, cancel).await?;
-        transform_result(&reply, text)
+        let retry = "\n上次回复不符合返回格式。请重新处理，只返回约定的 JSON 对象。";
+        let start = Instant::now();
+        for correction in ["", retry] {
+            if cancel.is_cancelled() {
+                return Err("处理已取消".into());
+            }
+            let remaining = timeout.saturating_sub(start.elapsed());
+            if remaining.is_zero() {
+                return Err("模型请求超时，可手动重试".into());
+            }
+            let system = format!("{rules}{correction}\n用户处理要求：\n{prompt}");
+            let reply = self
+                .complete(text, &system, model, remaining, cancel)
+                .await?;
+            if let Some(result) = transform_result(&reply, text) {
+                return Ok(result);
+            }
+        }
+        Err("模型未按要求返回处理结果，已自动重试一次，请检查提示词或换一个模型".into())
     }
 }
 
-fn transform_result(reply: &str, original: &str) -> Result<String> {
+fn transform_result(reply: &str, original: &str) -> Option<String> {
     let output = reply.trim();
     let json = output
         .split_once('\n')
@@ -157,14 +174,14 @@ fn transform_result(reply: &str, original: &str) -> Result<String> {
     if let Ok(Value::Object(value)) = serde_json::from_str::<Value>(json) {
         if value.len() == 1 {
             if let Some(text) = value.get("text").and_then(Value::as_str) {
-                return Ok(text.to_owned());
+                return Some(text.to_owned());
             }
             if value.get("unchanged").and_then(Value::as_bool) == Some(true) {
-                return Ok(original.to_owned());
+                return Some(original.to_owned());
             }
         }
     }
-    Err("模型未按要求返回处理结果，请重试或换一个模型".into())
+    None
 }
 
 #[cfg(test)]
@@ -184,7 +201,7 @@ mod tests {
             transform_result(fenced, original).unwrap(),
             "  **飒飒**\r\n\t"
         );
-        assert!(transform_result("无需去除，结果为 **飒飒**", original).is_err());
-        assert!(transform_result(r#"说明：{"text":"飒飒"}"#, original).is_err());
+        assert!(transform_result("无需去除，结果为 **飒飒**", original).is_none());
+        assert!(transform_result(r#"说明：{"text":"飒飒"}"#, original).is_none());
     }
 }
