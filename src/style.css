@@ -643,20 +643,6 @@ footer small {
 .shortcut-settings label {
   margin-bottom: 7px;
 }
-.shortcut-row {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  column-gap: 16px;
-}
-.shortcut-field {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.shortcut-row .check {
-  min-height: 39px;
-  white-space: nowrap;
-}
 .shortcut-feedback {
   margin: 0;
   font-size: 12px;

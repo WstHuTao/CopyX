@@ -20,7 +20,8 @@ export function ShortcutInput({
 }) {
   const platform = api?.platform || "darwin";
   const field = platform === "win32" ? "shortcutWin" : "shortcutMac";
-  const value = scheme[field];
+  const otherField = field === "shortcutMac" ? "shortcutWin" : "shortcutMac";
+  const value = scheme.enabled ? scheme[field] : "";
   const input = useRef<HTMLInputElement>(null),
     recording = useRef(false),
     mounted = useRef(true);
@@ -41,7 +42,7 @@ export function ShortcutInput({
   }, []);
   useEffect(() => {
     let stale = false;
-    if (!api || !value || !scheme.enabled) {
+    if (!api || !value) {
       setResult(null);
       setChecking(false);
       return;
@@ -72,7 +73,7 @@ export function ShortcutInput({
       stale = true;
       clearTimeout(timer);
     };
-  }, [value, scheme.id, scheme.enabled, schemes, aiShortcut, sharedAI]);
+  }, [value, scheme.id, schemes, aiShortcut, sharedAI]);
   async function start() {
     if (!api) return;
     try {
@@ -114,7 +115,10 @@ export function ShortcutInput({
     )
       return;
     if (event.key === "Backspace" || event.key === "Delete") {
-      onChange({ [field]: "" });
+      onChange({
+        [field]: "",
+        enabled: scheme.enabled && Boolean(scheme[otherField]),
+      });
       return;
     }
     const modifiers = [
@@ -154,36 +158,29 @@ export function ShortcutInput({
       : /^Digit[0-9]$/.test(event.code)
         ? event.code.slice(5)
         : codes[event.code] || event.key;
-    onChange({ [field]: [...modifiers, key].join("+") });
+    onChange({
+      [field]: [...modifiers, key].join("+"),
+      [otherField]: scheme.enabled ? scheme[otherField] : "",
+      enabled: true,
+    });
   }
   return (
     <div className="shortcut-settings">
-      <div className="shortcut-row">
-        <label className="shortcut-field">
-          快捷键
-          <input
-            ref={input}
-            aria-describedby="shortcut-feedback"
-            placeholder="点击后按下组合键，删除键清空"
-            value={value}
-            disabled={disabled}
-            onFocus={() => void start()}
-            onBlur={() => void end()}
-            onKeyDown={capture}
-            onChange={() => {}}
-            aria-invalid={scheme.enabled && result?.available === false}
-          />
-        </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={scheme.enabled}
-            disabled={disabled}
-            onChange={(e) => onChange({ enabled: e.target.checked })}
-          />
-          启用全局快捷键
-        </label>
-      </div>
+      <label>
+        快捷键
+        <input
+          ref={input}
+          aria-describedby="shortcut-feedback"
+          placeholder="点击后按下组合键，删除键清空"
+          value={value}
+          disabled={disabled}
+          onFocus={() => void start()}
+          onBlur={() => void end()}
+          onKeyDown={capture}
+          onChange={() => {}}
+          aria-invalid={result?.available === false}
+        />
+      </label>
       <p
         id="shortcut-feedback"
         className={
@@ -192,19 +189,15 @@ export function ShortcutInput({
         }
         role="status"
       >
-        {!scheme.enabled
-          ? "全局快捷键已关闭，仍可在工作台手动执行。"
-          : checking
-            ? "正在检查快捷键…"
-            : result?.message ||
-              (!value
-                ? "未设置快捷键时不会触发，仍可在工作台手动执行。"
-                : "保存设置后生效。")}
+        {checking
+          ? "正在检查快捷键…"
+          : result?.message ||
+            (value ? "保存设置后生效。" : "未设置快捷键，可在工作台手动执行。")}
       </p>
       <p className="help shortcut-explanation">
         {sharedAI
           ? "所有 AI 提示词命令共用此键位。按下后使用最近一次成功执行的提示词。"
-          : "开启后，可在其他应用中按快捷键获取选中文字。"}
+          : "保存后，可在其他应用中按快捷键处理选中文字。"}
       </p>
     </div>
   );

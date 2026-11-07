@@ -160,14 +160,7 @@ try {
     await button(name).click();
     await button("编辑设置").click();
     assert.equal(await field("快捷键").inputValue(), keyA);
-    const hotkeyBox = await field("快捷键").boundingBox();
-    const checkbox = await field("启用全局快捷键").boundingBox();
-    assert(checkbox.x > hotkeyBox.x + hotkeyBox.width);
-    assert(
-      Math.abs(
-        checkbox.y + checkbox.height / 2 - hotkeyBox.y - hotkeyBox.height / 2,
-      ) < 5,
-    );
+    assert.equal(await field("启用全局快捷键").count(), 0);
   }
   await button("保存自定义处理").click();
   await footer("配置已保存").waitFor();
@@ -333,7 +326,7 @@ try {
   assert(!stored.includes("copyx-prompt-fixture-key"));
   assert.deepEqual(errors, []);
   console.log(
-    "AI 提示词桌面验证通过：旧键位迁移、共享注册、冲突检测、开关位置、首次使用提示、成功记录、收藏排序、胶囊选择、编辑与删除、旧默认保护、失败与取消、同模型复用、重启保留及正文不落盘。",
+    "AI 提示词桌面验证通过：旧键位迁移、单一键位入口、共享注册、冲突检测、首次使用提示、成功记录、收藏排序、胶囊选择、编辑与删除、旧默认保护、失败与取消、同模型复用、重启保留及正文不落盘。",
   );
 } finally {
   if (app) await app.close();

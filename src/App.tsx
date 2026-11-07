@@ -78,10 +78,11 @@ export default function App() {
   const [switchSaving, setSwitchSaving] = useState(false);
   const editingShortcut =
     editScheme?.kind === "ai" ? draft.aiShortcut : editScheme;
-  const editingShortcutText =
-    api?.platform === "win32"
-      ? editingShortcut?.shortcutWin
-      : editingShortcut?.shortcutMac;
+  const editingShortcutText = editingShortcut?.enabled
+    ? api?.platform === "win32"
+      ? editingShortcut.shortcutWin
+      : editingShortcut.shortcutMac
+    : "";
   const workModel = config.models.find((m) => m.id === scheme?.modelId);
   const prompt =
     promptDraft?.schemeId === selected
@@ -335,7 +336,7 @@ export default function App() {
       kind: "script",
       script: "function transform(text) {\n  return text;\n}",
       prompt: "只输出转换后的文本，保留原始信息，不补充缺失内容。",
-      enabled: true,
+      enabled: false,
       shortcutMac: "",
       shortcutWin: "",
     };
@@ -657,9 +658,10 @@ export default function App() {
                       : "本地脚本处理 · 当前使用测试通过的生效版本"}
                 </span>
                 <span className="shortcut">
-                  {api?.platform === "win32"
-                    ? scheme?.shortcutWin
-                    : scheme?.shortcutMac}
+                  {scheme?.enabled &&
+                    (api?.platform === "win32"
+                      ? scheme.shortcutWin
+                      : scheme.shortcutMac)}
                 </span>
               </div>
             )}
@@ -992,13 +994,12 @@ export default function App() {
                   </fieldset>
                   {!basicExpanded && !editScheme.disabled && (
                     <div className="processing-shortcut-summary">
-                      {editingShortcut?.enabled ? (
+                      {editingShortcutText ? (
                         <>
-                          专用快捷键{" "}
-                          <kbd>{editingShortcutText || "尚未设置"}</kbd>
+                          专用快捷键 <kbd>{editingShortcutText}</kbd>
                         </>
                       ) : (
-                        "快捷键未启用"
+                        "未设置快捷键"
                       )}
                     </div>
                   )}

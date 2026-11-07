@@ -273,7 +273,16 @@ try {
     (await page.evaluate(() => window.desktop.getConfig())).data.schemes.length,
     1,
   );
-  await page.getByLabel("启用全局快捷键", { exact: true }).uncheck();
+  assert.equal(
+    await page.getByLabel("启用全局快捷键", { exact: true }).count(),
+    0,
+  );
+  await page.getByLabel("快捷键", { exact: true }).click();
+  await page.keyboard.press("Backspace");
+  assert.equal(
+    await page.getByLabel("快捷键", { exact: true }).inputValue(),
+    "",
+  );
   await page
     .getByRole("button", { name: /^(保存草稿|保存自定义处理|保存设置)$/ })
     .click();
@@ -283,6 +292,7 @@ try {
     (item) => item.name === "重复快捷键处理",
   );
   assert.equal(disabledItem.enabled, false);
+  assert.equal(disabledItem.shortcutMac, "");
   await activateForTest(page, disabledItem.id, [
     {
       id: "manual",
@@ -296,6 +306,40 @@ try {
     disabledItem.id,
   );
   assert(manual.ok && manual.data === "关闭后仍可手动执行");
+  const legacyShortcut = await page.evaluate(async (id) => {
+    const { data } = await window.desktop.getConfig();
+    const item = data.schemes.find((scheme) => scheme.id === id);
+    item.shortcutMac = "Control+Alt+Shift+F8";
+    return window.desktop.saveConfig(data);
+  }, disabledItem.id);
+  assert(legacyShortcut.ok);
+  await page.reload();
+  await page.getByRole("button", { name: "自定义处理", exact: true }).click();
+  await page.getByRole("button", { name: /^重复快捷键处理/ }).click();
+  await page.getByRole("button", { name: "编辑设置", exact: true }).click();
+  assert.equal(
+    await page.getByLabel("快捷键", { exact: true }).inputValue(),
+    "",
+  );
+  assert.equal(
+    await app.evaluate(({ globalShortcut }) =>
+      globalShortcut.isRegistered("Control+Alt+Shift+F8"),
+    ),
+    false,
+  );
+  await page.getByLabel("快捷键", { exact: true }).click();
+  await page.keyboard.press("Control+Alt+Shift+F8");
+  await page
+    .locator("#shortcut-feedback")
+    .filter({ hasText: "未发现注册冲突" })
+    .waitFor();
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await page.getByRole("status").filter({ hasText: "配置已保存" }).waitFor();
+  assert(
+    await app.evaluate(({ globalShortcut }) =>
+      globalShortcut.isRegistered("Control+Alt+Shift+F8"),
+    ),
+  );
   const occupied = "Control+Alt+Shift+F19";
   assert(
     await app.evaluate(
@@ -324,7 +368,7 @@ try {
   );
   await page.getByRole("button", { name: "处理工作台", exact: true }).click();
   console.log(
-    "桌面验证：单一快捷键录入、系统注册检测、内部冲突阻止保存、关闭后手动模式通过",
+    "桌面验证：快捷键录入、系统注册检测、内部冲突阻止保存、清空后手动模式通过",
   );
   const configReply = await page.evaluate(() => window.desktop.getConfig());
   assert(configReply.ok);
