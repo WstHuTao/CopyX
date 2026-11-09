@@ -235,7 +235,7 @@ impl Desktop {
             return;
         };
         let result = match self.capture_payload(target) {
-            Ok((payload, Some(source))) => self.capture_and_paste(app, payload, &source).await,
+            Ok((payload, Some(source))) => self.capture_and_copy(app, payload, &source).await,
             Ok((mut payload, None)) => native::capture(app).await.map(|text| {
                 payload["text"] = json!(text);
                 Some(payload)
@@ -245,7 +245,7 @@ impl Desktop {
         if matches!(&result, Ok(None)) {
             return;
         }
-        // 取文及直接粘贴结束后再打开核对窗口。
+        // 取文结束后再打开核对窗口。
         open(app);
         drop(gate);
         match result {
@@ -257,33 +257,38 @@ impl Desktop {
         }
     }
 
-    async fn capture_and_paste(
+    async fn capture_and_copy(
         &self,
         app: &AppHandle,
         mut payload: Value,
         source: &str,
     ) -> Result<Option<Value>> {
-        let (text, session) = native::capture_direct(app).await?;
-        let outcome: Result<Option<String>> = async {
+        let text = native::capture(app).await?;
+        let outcome: Result<String> = async {
             let task = self.begin(TaskKind::Process, None)?;
             let result = script::run(&text, source, &task.cancel).await?;
             if result.len() > 2 * MB {
                 return Err("处理结果超过 2 MB，请分段处理".into());
             }
             task.complete()?;
-            if let Some(session) = session {
-                if session.replace(&result).await {
-                    return Ok(None);
-                }
-            }
-            Ok(Some(result))
+            Ok(result)
         }
         .await;
         let prepared = match outcome {
-            Ok(None) => return Ok(None),
-            Ok(Some(result)) => json!({
-                "result":result,"notice":"无法确认已粘贴，请核对原应用与处理结果。"
-            }),
+            Ok(result) => {
+                let clipboard = app.clipboard();
+                let notice = match clipboard.read_text() {
+                    Ok(current) if current == text => {
+                        if clipboard.write_text(result.as_str()).is_ok() {
+                            return Ok(None);
+                        }
+                        "无法写入剪贴板，请在核对页复制结果。"
+                    }
+                    Ok(_) => "处理期间剪贴板已变化，请在核对页复制结果。",
+                    Err(_) => "无法读取剪贴板，请在核对页复制结果。",
+                };
+                json!({"result":result,"notice":notice})
+            }
             Err(error) => json!({"error":error}),
         };
         payload["text"] = json!(text);

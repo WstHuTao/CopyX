@@ -29,7 +29,6 @@ const { ScriptTests, activeScriptSource } = require("./core/script-tests.cjs");
 const scriptTests = new ScriptTests();
 const {
   captureSelection,
-  captureDirect,
   checkCapturePermission,
 } = require("./core/capture.cjs");
 const { ShortcutManager, shortcutBindings } = require("./core/shortcuts.cjs");
@@ -90,9 +89,8 @@ else {
       ? path.join(__dirname, "native/capture.ps1")
       : path.join(__dirname, "../assets/capture-mac");
   }
-  async function runDirectCapture(target, source) {
-    const selection = await captureDirect(captureHelper());
-    const { text } = selection;
+  async function captureAndCopy(target, source) {
+    const text = await captureSelection(captureHelper());
     const controller = new AbortController();
     task = controller;
     try {
@@ -103,21 +101,29 @@ else {
       if (Buffer.byteLength(result) > 2 * 1024 * 1024)
         throw new Error("处理结果超过 2 MB，请分段处理");
       controller.finishing = true;
-      if (await selection.replace(result)) return;
+      let notice;
+      try {
+        if (clipboard.readText() === text) {
+          clipboard.writeText(result);
+          return;
+        }
+        notice = "处理期间剪贴板已变化，请在核对页复制结果。";
+      } catch {
+        notice = "无法访问剪贴板，请在核对页复制结果。";
+      }
       open();
       send("capture", {
         ...target,
         text,
         prepared: {
           result,
-          notice: "无法确认已粘贴，请核对原应用与处理结果。",
+          notice,
         },
       });
     } catch (error) {
       open();
       send("capture", { ...target, text, prepared: { error: error.message } });
     } finally {
-      selection.close();
       task = null;
     }
   }
@@ -154,7 +160,7 @@ else {
       if (scheme?.kind === "script") {
         const source = activeScriptSource(scheme);
         if (scheme.directPaste && scheme.activeScript?.status === "verified") {
-          await runDirectCapture(target, source);
+          await captureAndCopy(target, source);
           return;
         }
       }

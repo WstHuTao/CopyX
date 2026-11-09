@@ -106,7 +106,7 @@ try {
   await writeFile(
     path.join(temp, "main.cjs"),
     `
-    const { globalShortcut } = require("electron");
+    const { clipboard, globalShortcut } = require("electron");
     const register = globalShortcut.register.bind(globalShortcut);
     globalThis.copyxFixtureShortcuts = new Map();
     globalShortcut.register = (key, callback) => {
@@ -114,17 +114,15 @@ try {
       if (registered) globalThis.copyxFixtureShortcuts.set(key, callback);
       return registered;
     };
-    require(${JSON.stringify(require.resolve("../electron/core/capture.cjs"))}).captureSelection = async () => ${JSON.stringify(text)};
-    require(${JSON.stringify(require.resolve("../electron/core/capture.cjs"))}).captureDirect = async () => {
-      let received;
-      return {
-        text: ${JSON.stringify(text)},
-        replace: async (result) => {
-          received = result;
-          return globalThis.copyxDirectAllowed;
-        },
-        close: () => globalThis.copyxDirectDone(received),
-      };
+    clipboard.readText = () => globalThis.copyxFixtureClipboard;
+    clipboard.writeText = (value) => {
+      globalThis.copyxFixtureClipboard = value;
+      globalThis.copyxDirectDone?.(value);
+    };
+    require(${JSON.stringify(require.resolve("../electron/core/capture.cjs"))}).captureSelection = async () => {
+      const original = ${JSON.stringify(text)};
+      globalThis.copyxFixtureClipboard = globalThis.copyxClipboardChanged ? "用户新复制的文字" : original;
+      return original;
     };
     require(${JSON.stringify(require.resolve("../electron/main.cjs"))});
   `,
@@ -362,7 +360,7 @@ try {
     const scheme = settings.schemes.find((item) => item.id === "s");
     scheme.script = 'function transform(text) { return text + "已处理"; }';
     scheme.testCases = [
-      { id: "case", name: "直接粘贴", input, expected: input + "已处理" },
+      { id: "case", name: "直接复制", input, expected: input + "已处理" },
     ];
     const saved = await window.desktop.saveConfig(settings);
     if (!saved.ok) return saved;
@@ -383,7 +381,7 @@ try {
   await button("自定义处理").click();
   await button("本地脚本 JavaScript 脚本").click();
   await button("编辑设置").click();
-  const direct = page.getByRole("checkbox", { name: "处理后直接粘贴" });
+  const direct = page.getByRole("checkbox", { name: "处理后直接复制" });
   assert.equal(await direct.isChecked(), false);
   await direct.check();
   await button("保存草稿").click();
@@ -392,27 +390,43 @@ try {
     (await config()).schemes.find(({ id }) => id === "s").directPaste,
     true,
   );
-  async function triggerDirect(allowed) {
+  async function triggerDirect(changed) {
     return app.evaluate(
-      ({ globalShortcut }, { key, allowed }) => {
+      ({ globalShortcut }, { key, changed }) => {
         if (!globalShortcut.isRegistered(key))
           throw new Error("脚本快捷键尚未注册");
-        globalThis.copyxDirectAllowed = allowed;
-        return new Promise((resolve) => {
-          globalThis.copyxDirectDone = resolve;
+        globalThis.copyxClipboardChanged = changed;
+        if (changed) {
+          globalThis.copyxFixtureShortcuts.get(key)();
+          return;
+        }
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("处理结果未复制")),
+            5000,
+          );
+          globalThis.copyxDirectDone = (value) => {
+            clearTimeout(timer);
+            delete globalThis.copyxDirectDone;
+            resolve(value);
+          };
           globalThis.copyxFixtureShortcuts.get(key)();
         });
       },
-      { key: keyScript, allowed },
+      { key: keyScript, changed },
     );
   }
-  assert.equal(await triggerDirect(true), text + "已处理");
+  assert.equal(await triggerDirect(false), text + "已处理");
   assert.equal(
     await page.getByRole("heading", { name: "自定义处理" }).count(),
     1,
   );
-  assert.equal(await triggerDirect(false), text + "已处理");
-  await footer("无法确认已粘贴").waitFor();
+  await triggerDirect(true);
+  await footer("处理期间剪贴板已变化").waitFor();
+  assert.equal(
+    await app.evaluate(({ clipboard }) => clipboard.readText()),
+    "用户新复制的文字",
+  );
   await page
     .locator(".monaco-diff-editor .modified .view-lines")
     .filter({ hasText: "已处理" })
@@ -422,7 +436,7 @@ try {
     "AI 提示词桌面验证通过：旧键位迁移、单一键位入口、共享注册、冲突检测、首次使用提示、成功记录、收藏排序、胶囊选择、编辑与删除、旧默认保护、失败与取消、同模型复用、重启保留及正文不落盘。",
   );
   console.log(
-    "直接粘贴桌面验证通过：默认关闭、验证后启用、成功保留当前页面、失败回到核对页且保留结果。",
+    "直接复制桌面验证通过：默认关闭、验证后启用、成功复制结果并保留当前页面、剪贴板变化时保留用户新复制的内容并展示结果。",
   );
 } finally {
   if (app) await app.close();

@@ -50,7 +50,7 @@ function validateConfig(value, { allowLargeScript = () => false } = {}) {
       scheme.directPaste !== undefined &&
       typeof scheme.directPaste !== "boolean"
     )
-      throw new Error("直接粘贴设置格式不正确");
+      throw new Error("直接复制设置格式不正确");
     if (typeof scheme.enabled !== "boolean")
       throw new Error("方案启用状态不正确");
     if (

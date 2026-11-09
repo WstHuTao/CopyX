@@ -1060,7 +1060,7 @@ export default function App() {
                             updateScheme({ directPaste: e.target.checked })
                           }
                         />
-                        处理后直接粘贴
+                        处理后直接复制
                         {storedEditScheme?.activeScript?.status !==
                           "verified" && (
                           <small>测试通过并启用脚本后可设置</small>
