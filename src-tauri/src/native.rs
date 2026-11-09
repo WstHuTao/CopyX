@@ -1,5 +1,5 @@
 use crate::contract::*;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::{process::Stdio, time::Duration};
 use tauri::{AppHandle, Manager};
 use tokio::{io::AsyncReadExt, process::Command};
