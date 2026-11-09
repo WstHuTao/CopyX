@@ -35,7 +35,7 @@ pub struct CheckInput {
     key: String,
     schemes: Vec<Scheme>,
     ai_shortcut: Option<ShortcutSettings>,
-    #[serde(default)]
+    #[serde(default, alias = "sharedAI")]
     shared_ai: bool,
 }
 
@@ -340,6 +340,27 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 快捷键检查识别前端发送的共享标识() {
+        let shared: CheckInput = serde_json::from_value(json!({
+            "schemeId": "ai-prompt-shortcut",
+            "key": "Command+Shift+B",
+            "schemes": [],
+            "sharedAI": true
+        }))
+        .unwrap();
+        assert!(shared.shared_ai);
+
+        let script: CheckInput = serde_json::from_value(json!({
+            "schemeId": "script",
+            "key": "Command+Shift+B",
+            "schemes": []
+        }))
+        .unwrap();
+        assert!(!script.shared_ai);
+    }
+
     #[test]
     fn 禁用指令不占用独立或共享快捷键() {
         let mut scheme: Scheme = serde_json::from_value(serde_json::json!({
